@@ -1,0 +1,83 @@
+.cmdbar {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  padding: 10px var(--gap-md);
+  background: linear-gradient(135deg, rgba(13, 30, 56, 0.95), rgba(17, 34, 64, 0.9));
+  border: 1px solid var(--surface-3);
+  border-radius: var(--radius-xl);
+  transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.cmdbar:focus-within {
+  border-color: var(--cyan-glow);
+  box-shadow: 0 0 20px var(--cyan-dim), inset 0 0 10px rgba(0, 212, 255, 0.03);
+}
+
+.cmdbar__icon {
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.cmdbar__spinner {
+  width: 16px; height: 16px;
+  border: 2px solid var(--amber-dim);
+  border-top-color: var(--amber);
+  border-radius: 50%;
+  animation: spin-slow 0.8s linear infinite;
+}
+
+.cmdbar__input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  caret-color: var(--cyan);
+}
+
+.cmdbar__input::placeholder {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.cmdbar__input:disabled {
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+/* Waveform bars */
+.cmdbar__wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 var(--gap-sm);
+  opacity: 0.4;
+}
+
+.cmdbar__wave-bar {
+  width: 2px;
+  height: 14px;
+  background: var(--cyan);
+  border-radius: 1px;
+  animation: waveform 1.2s ease-in-out infinite;
+}
+
+.cmdbar__send {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: 16px;
+  border-radius: var(--radius-md);
+}
+
+.cmdbar__send:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  box-shadow: none;
+}
