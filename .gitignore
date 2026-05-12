@@ -1,0 +1,65 @@
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+
+# ── Virtual Environments ──────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Environment & Secrets ─────────────────────────────────────
+.env
+*.env.local
+*.env.*.local
+
+# ── Database ──────────────────────────────────────────────────
+backend/data/db/*.db
+backend/data/db/*.db-journal
+backend/data/db/*.db-wal
+backend/data/db/*.db-shm
+
+# ── Logs ──────────────────────────────────────────────────────
+backend/logs/
+*.log
+
+# ── AI / ML Models (downloaded at runtime) ───────────────────
+*.onnx
+*.tflite
+*.bin
+*.safetensors
+
+# ── Node / Frontend ───────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-electron/
+.npm
+*.tsbuildinfo
+
+# ── Electron ──────────────────────────────────────────────────
+out/
+release/
+*.dmg
+*.AppImage
+*.exe.blockmap
+
+# ── IDEs ──────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── OS ────────────────────────────────────────────────────────
+desktop.ini
