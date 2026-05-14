@@ -1,16 +1,17 @@
 """
 JARVIS OS — AI Brain Engine
-The central intelligence. Connects to DeepSeek (OpenAI-compatible API).
+The central intelligence. Connects to any OpenAI-compatible API (Groq, Gemini, DeepSeek).
 
 Responsibilities:
   - Subscribe to TEXT_INPUT + VOICE_INPUT events
   - Build contextual prompts with memory + current context
-  - Call DeepSeek API
+  - Call AI API for intent classification + response generation
   - Parse intent + plan tasks
   - Publish RESPONSE_GENERATED and EXECUTION_STARTED events
+  - Integrate with Memory Engine for persistent context
 
 Phase 2: Basic conversation + intent classification + simple task dispatch.
-Phase 3: Multi-step planning, tool use, workflow learning.
+Phase 3: Memory-augmented reasoning, REMEMBER/RECALL, preference learning.
 """
 import asyncio
 import json
@@ -20,6 +21,7 @@ from loguru import logger
 from ...config import settings
 from ...event_bus import event_bus, Event, EventType
 from ...state import state_manager, JarvisState
+from ..memory_engine import memory_engine
 
 
 # ── System Prompt ──────────────────────────────────────────────────────────────
@@ -100,8 +102,8 @@ class BrainEngine:
             )
         return self._client
 
-    def _build_messages(self, user_input: str, context: dict | None = None) -> list[dict]:
-        """Build the message list for the API call with context injection."""
+    async def _build_messages(self, user_input: str, context: dict | None = None) -> list[dict]:
+        """Build the message list for the API call with memory + context injection."""
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
         # Inject current context as a system note
@@ -115,8 +117,37 @@ class BrainEngine:
             )
             messages.append({"role": "system", "content": ctx_note})
 
-        # Add conversation history (rolling window)
-        messages.extend(self._conversation_history[-self._max_history:])
+        # ── Phase 3: Inject memory context ──────────────────────────────────
+        try:
+            mem_ctx = await memory_engine.build_memory_context(user_input)
+
+            # Inject relevant memories
+            if mem_ctx.get("relevant_memories"):
+                mem_text = "\n[RELEVANT MEMORIES]\n"
+                for mem in mem_ctx["relevant_memories"]:
+                    mem_text += f"- [{mem['type']}] {mem['content']}\n"
+                messages.append({"role": "system", "content": mem_text})
+
+            # Inject user preferences
+            if mem_ctx.get("preferences"):
+                pref_text = "\n[USER PREFERENCES]\n"
+                for k, v in mem_ctx["preferences"].items():
+                    pref_text += f"- {k}: {v}\n"
+                messages.append({"role": "system", "content": pref_text})
+
+            # Add conversation history from persistent storage
+            if mem_ctx.get("recent_conversations"):
+                for turn in mem_ctx["recent_conversations"]:
+                    # Map 'jarvis' → 'assistant' for API compatibility
+                    role = "assistant" if turn["role"] == "jarvis" else turn["role"]
+                    messages.append({"role": role, "content": turn["content"]})
+            else:
+                # Fallback to in-memory history if memory engine has no data yet
+                messages.extend(self._conversation_history[-self._max_history:])
+
+        except Exception as e:
+            logger.warning(f"[Brain] Memory context failed, using in-memory fallback: {e}")
+            messages.extend(self._conversation_history[-self._max_history:])
 
         # Add current user message
         messages.append({"role": "user", "content": user_input})
@@ -143,9 +174,9 @@ class BrainEngine:
             }
 
     async def _call_ai(self, user_input: str, context: dict | None = None) -> dict:
-        """Make the API call to DeepSeek and return parsed result."""
+        """Make the API call and return parsed result."""
         client = self._get_client()
-        messages = self._build_messages(user_input, context)
+        messages = await self._build_messages(user_input, context)
 
         logger.info(f"[Brain] → {settings.AI_MODEL} @ {settings.AI_BASE_URL[:40]} | '{user_input[:50]}...'")
 
@@ -154,13 +185,12 @@ class BrainEngine:
             messages=messages,
             temperature=settings.AI_TEMPERATURE,
             max_tokens=settings.AI_MAX_TOKENS,
-            # Note: response_format not used — Gemini enforces JSON via system prompt
         )
 
         raw = response.choices[0].message.content
-        logger.debug(f"[Brain] ← DeepSeek raw: {raw[:200]}")
+        logger.debug(f"[Brain] ← raw: {raw[:200]}")
 
-        # Update conversation history
+        # Update in-memory history (fallback)
         self._conversation_history.append({"role": "user", "content": user_input})
         self._conversation_history.append({"role": "assistant", "content": raw})
 
@@ -237,8 +267,30 @@ class BrainEngine:
             priority="HIGH",
         ))
 
+        # ── Phase 3: Handle REMEMBER / RECALL actions ────────────────────
+        if action == "REMEMBER":
+            # Store the user's original input as the memory (or AI-extracted content if available)
+            content_to_store = params.get("content", params.get("text", user_input))
+            mem_type = params.get("type", "fact")
+            importance = params.get("importance", 0.7)
+            await memory_engine.store_memory(
+                content=content_to_store,
+                memory_type=mem_type,
+                importance=importance,
+            )
+            logger.info(f"[Brain] Stored memory: {content_to_store[:60]}")
+
+        elif action == "RECALL":
+            query = params.get("query", params.get("text", ""))
+            memories = await memory_engine.search_memories(query, limit=5)
+            if memories:
+                mem_text = "\n".join(f"- {m['content']}" for m in memories)
+                logger.info(f"[Brain] Recalled {len(memories)} memories")
+            else:
+                logger.info("[Brain] No memories found for recall")
+
         # If there's an action to execute — fire it
-        if action != "NONE":
+        elif action != "NONE":
             await event_bus.publish(Event(
                 type=EventType.EXECUTION_STARTED,
                 data={

@@ -17,6 +17,7 @@ from .runtime.ws_manager import ws_manager
 from .state import state_manager
 from .engines.context_engine import context_engine
 from .engines.brain_engine import brain_engine
+from .engines.memory_engine import memory_engine
 from .engines.automation_engine import automation_engine
 from .engines.voice_engine import voice_engine
 from .api import router as api_router
@@ -38,16 +39,19 @@ async def lifespan(app: FastAPI):
     # 3. Context Engine — passive monitoring
     await context_engine.start()
 
-    # 4. Brain Engine — AI reasoning (DeepSeek)
+    # 4. Brain Engine — AI reasoning
     await brain_engine.start()
 
-    # 5. Automation Engine — desktop control
+    # 5. Memory Engine — persistent conversations & knowledge (Phase 3)
+    await memory_engine.start()
+
+    # 6. Automation Engine — desktop control
     await automation_engine.start()
 
-    # 6. Voice Engine — wake word + STT + TTS
+    # 7. Voice Engine — wake word + STT + TTS
     await voice_engine.start()
 
-    # 7. WS → Event Bus bridge
+    # 8. WS → Event Bus bridge
     ws_manager.register_listeners()
 
     logger.success("[App] All services online — ready to serve")
@@ -58,6 +62,7 @@ async def lifespan(app: FastAPI):
     logger.info("[App] Shutting down...")
     await voice_engine.stop()
     await automation_engine.stop()
+    await memory_engine.stop()
     await brain_engine.stop()
     await context_engine.stop()
     await event_bus.stop()
