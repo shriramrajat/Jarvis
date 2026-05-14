@@ -95,6 +95,7 @@ class AutomationEngine:
             "SYSTEM_INFO":    self._system_info,
             "SET_MODE":       self._set_mode,
             "FILE_OPERATION": self._file_operation,
+            "WORKFLOW":       self._workflow,
             "REMEMBER":       self._noop,   # Handled by memory engine
             "RECALL":         self._noop,   # Handled by memory engine
         }
@@ -235,6 +236,40 @@ class AutomationEngine:
         # Phase 3 — basic stub for now
         logger.warning("[Automation] File operations are Phase 3")
         return {"status": "not_implemented", "phase": 3}
+
+    async def _workflow(self, params: dict) -> dict:
+        """Executes a multi-step routine sequentially."""
+        steps = params.get("steps", [])
+        if not steps:
+            return {"status": "empty_workflow"}
+
+        logger.info(f"[Automation] Starting workflow with {len(steps)} steps")
+        results = []
+        
+        for idx, step in enumerate(steps):
+            step_action = step.get("action")
+            step_params = step.get("params", {})
+            
+            logger.info(f"[Automation] Workflow Step {idx+1}/{len(steps)}: {step_action}")
+            
+            handler = self._action_map.get(step_action)
+            if not handler:
+                logger.warning(f"[Automation] Workflow step failed — unknown action: {step_action}")
+                results.append({"step": idx+1, "action": step_action, "status": "failed", "error": "Unknown action"})
+                continue
+                
+            try:
+                # Add slight delay between steps so we don't overwhelm the system
+                if idx > 0:
+                    await asyncio.sleep(1.0)
+                
+                step_result = await handler(step_params)
+                results.append({"step": idx+1, "action": step_action, "status": "success", "result": step_result})
+            except Exception as e:
+                logger.error(f"[Automation] Workflow step failed: {e}")
+                results.append({"step": idx+1, "action": step_action, "status": "failed", "error": str(e)})
+
+        return {"status": "completed", "steps_executed": len(steps), "results": results}
 
     async def _noop(self, params: dict) -> dict:
         return {"status": "delegated"}
