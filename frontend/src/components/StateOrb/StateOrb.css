@@ -3,114 +3,131 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--gap-md);
+  gap: var(--gap-lg);
   position: relative;
   padding: var(--gap-xl);
 }
 
-/* Decorative rings */
-.orb-ring {
-  position: absolute;
-  border-radius: 50%;
-  border: 1px solid;
-  pointer-events: none;
-}
-
-.orb-ring--1 { width: 160px; height: 160px; }
-.orb-ring--2 { width: 200px; height: 200px; }
-.orb-ring--3 { width: 240px; height: 240px; animation: spin-slow 20s linear infinite; }
-
-/* Pulse ring (listening/speaking) */
-.orb-pulse-ring {
-  position: absolute;
-  width: 130px; height: 130px;
-  border-radius: 50%;
-  border: 2px solid;
-  animation: pulse-ring 1.5s ease-out infinite;
-  pointer-events: none;
-}
-
-/* Core orb */
-.orb-core {
-  width: 120px; height: 120px;
-  border-radius: 50%;
-  border: 2px solid;
+.arc-reactor {
+  position: relative;
+  width: 160px;
+  height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
+  color: var(--cyan);
+}
+
+/* Base Rings */
+.arc-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* Use dashed borders for that HUD mechanical feel */
+.arc-ring-1 {
+  width: 140px; height: 140px;
+  border: 2px dashed rgba(0, 212, 255, 0.4);
+  animation: spin-cw 20s linear infinite;
+}
+
+.arc-ring-2 {
+  width: 110px; height: 110px;
+  border-top: 2px solid rgba(0, 212, 255, 0.6);
+  border-bottom: 2px solid rgba(0, 212, 255, 0.6);
+  animation: spin-ccw 12s linear infinite;
+}
+
+.arc-ring-3 {
+  width: 85px; height: 85px;
+  border: 1px dotted rgba(0, 212, 255, 0.8);
+  animation: spin-cw 8s linear infinite;
+}
+
+/* The Core SVG */
+.arc-core {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  will-change: transform, opacity;
+  transition: color 0.3s ease;
+}
+
+.arc-core-svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Hardware accelerated Pulse (Scale/Opacity instead of Box-Shadow) */
+.arc-pulse {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
   z-index: 1;
-  transition: all 0.4s ease;
+  will-change: transform, opacity;
+  animation: pulse-ring-fast 1s ease-out infinite;
 }
 
-.orb-letter {
-  font-size: 36px;
-  font-weight: 900;
-  line-height: 1;
+/* State Modifiers */
+.arc-reactor--thinking {
+  color: var(--amber);
+}
+.arc-reactor--thinking .arc-ring {
+  border-color: rgba(245, 166, 35, 0.4);
+}
+.arc-reactor--thinking .arc-ring-2 {
+  animation: spin-ccw 2s linear infinite; /* Spin much faster when thinking */
 }
 
-/* State animations */
-.orb-idle {
-  animation: pulse-cyan 3s ease-in-out infinite;
+.arc-reactor--speaking {
+  color: var(--cyan);
+}
+.arc-reactor--speaking .arc-pulse {
+  animation: pulse-ring-fast 0.6s ease-out infinite;
 }
 
-.orb-listening {
-  animation: pulse-cyan 0.8s ease-in-out infinite;
+.arc-reactor--listening {
+  color: #0088FF;
 }
 
-.orb-thinking {
-  animation: pulse-cyan 0.4s ease-in-out infinite;
-}
-
-.orb-executing {
-  animation: spin-slow 2s linear infinite, pulse-cyan 1s ease-in-out infinite;
-}
-
-.orb-error {
-  animation: none;
-  box-shadow: 0 0 30px var(--red-dim), 0 0 60px var(--red-dim) !important;
-}
-
-/* Info section */
+/* Info Text */
 .orb-info {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
   text-align: center;
 }
-
 .orb-state {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 16px;
   letter-spacing: 0.2em;
+  font-weight: bold;
 }
-
-.orb-message {
-  font-size: 12px;
-  color: var(--text-secondary);
-  max-width: 200px;
-  text-align: center;
-}
-
 .orb-mode {
   font-size: 10px;
   letter-spacing: 0.1em;
-  margin-top: 2px;
 }
 
-/* Thinking dots */
-.orb-thinking-dots {
-  display: flex;
-  gap: 6px;
-  position: absolute;
-  bottom: 20px;
+/* Optimized Animations */
+@keyframes spin-cw {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
-.orb-thinking-dots .dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--amber);
-  box-shadow: 0 0 6px var(--amber);
-  animation: blink 0.8s ease-in-out infinite;
+@keyframes spin-ccw {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(-360deg); }
+}
+
+@keyframes pulse-ring-fast {
+  0% { transform: scale(0.5); opacity: 0.5; }
+  100% { transform: scale(1.8); opacity: 0; }
 }

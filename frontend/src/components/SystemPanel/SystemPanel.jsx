@@ -27,9 +27,9 @@ export default function SystemPanel({ context }) {
         <div 
           className="sys-panel__metric-bar-fill" 
           style={{ 
-            width: `${value}%`,
+            transform: `scaleX(${value / 100})`,
             background: getMeterColor(value),
-            boxShadow: `0 0 8px ${getMeterColor(value)}`
+            /* Removing expensive box-shadow for performance */
           }} 
         />
       </div>
