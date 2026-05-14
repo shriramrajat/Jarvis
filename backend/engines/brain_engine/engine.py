@@ -23,6 +23,7 @@ from ...event_bus import event_bus, Event, EventType
 from ...state import state_manager, JarvisState
 from ..memory_engine import memory_engine
 from ..personality_engine import personality_engine
+from ..chronos_engine import chronos_engine
 
 
 # ── System Prompt ──────────────────────────────────────────────────────────────
@@ -49,17 +50,18 @@ Your capabilities (available tools):
 - REMEMBER: Store something in memory
 - RECALL: Retrieve from memory
 - WORKFLOW: Execute a sequence of multiple actions sequentially
+- SCHEDULE: Schedule a verbal reminder to execute in the future (delay_seconds required)
 - NONE: Conversational response only — no action needed
 
 Risk levels:
 - LOW: Open apps, search, info queries → execute immediately
-- MEDIUM: File reads, URL opens → execute immediately
+- MEDIUM: File reads, URL opens, Reminders → execute immediately
 - HIGH: Delete files, run arbitrary commands, form submissions → ask confirmation first
 
 Respond in this exact JSON format:
 {
   "response": "What you say to the user",
-  "action": "OPEN_APP | RUN_COMMAND | SEARCH_WEB | OPEN_URL | FILE_OPERATION | SYSTEM_INFO | SET_MODE | REMEMBER | RECALL | WORKFLOW | NONE",
+  "action": "OPEN_APP | RUN_COMMAND | SEARCH_WEB | OPEN_URL | FILE_OPERATION | SYSTEM_INFO | SET_MODE | REMEMBER | RECALL | WORKFLOW | SCHEDULE | NONE",
   "params": {},
   "risk": "LOW | MEDIUM | HIGH",
   "requires_confirmation": false
@@ -68,6 +70,9 @@ Respond in this exact JSON format:
 Examples:
 User: "open vs code"
 → {"response": "Opening Visual Studio Code.", "action": "OPEN_APP", "params": {"app": "code"}, "risk": "LOW", "requires_confirmation": false}
+
+User: "remind me to call mom in 10 minutes"
+→ {"response": "I will remind you to call your mom in 10 minutes.", "action": "SCHEDULE", "params": {"message": "Sir, it's time to call your mom.", "delay_seconds": 600}, "risk": "LOW", "requires_confirmation": false}
 
 User: "run my morning routine"
 → {"response": "Good morning, sir. Starting your workflow.", "action": "WORKFLOW", "params": {"steps": [{"action": "OPEN_URL", "params": {"url": "mail.google.com"}}, {"action": "OPEN_APP", "params": {"app": "spotify"}}]}, "risk": "LOW", "requires_confirmation": false}
@@ -300,6 +305,12 @@ class BrainEngine:
                 logger.info(f"[Brain] Recalled {len(memories)} memories")
             else:
                 logger.info("[Brain] No memories found for recall")
+                
+        # ── Phase 4: Handle SCHEDULE actions ───────────────────────────
+        elif action == "SCHEDULE":
+            message = params.get("message", "Reminder")
+            delay = int(params.get("delay_seconds", 60))
+            chronos_engine.schedule_reminder(message, delay)
 
         # If there's an action to execute — fire it
         elif action != "NONE":
