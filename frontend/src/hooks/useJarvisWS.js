@@ -100,6 +100,24 @@ export function useJarvisWS() {
     send('TEXT_INPUT', { text });
   }, [send]);
 
+  // Fetch initial history
+  useEffect(() => {
+    fetch('http://127.0.0.1:8000/api/v1/memory/conversations?limit=50')
+      .then(res => res.json())
+      .then(data => {
+        if (data.conversations) {
+          const loaded = data.conversations.map(c => ({
+            id: c.id || Date.now() + Math.random(),
+            role: c.role,
+            content: c.content,
+            timestamp: c.timestamp || c.created_at
+          })).reverse(); // Oldest first for the chat window
+          setMessages(loaded);
+        }
+      })
+      .catch(err => console.error('[WS] Failed to fetch memory history:', err));
+  }, []);
+
   useEffect(() => {
     connect();
     return () => {

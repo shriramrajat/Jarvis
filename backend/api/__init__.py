@@ -1,13 +1,11 @@
-"""
-JARVIS OS — API Router (v1)
-Aggregates all REST endpoint sub-routers.
-"""
 from fastapi import APIRouter
-from .routes import system, command, memory, context
+from .routes.command import router as command_router
+from .routes.system import router as system_router
+from .routes.memory import router as memory_router
 
 router = APIRouter()
+router.include_router(command_router, prefix="/command", tags=["Command"])
+router.include_router(system_router, prefix="/system", tags=["System"])
+router.include_router(memory_router, prefix="/memory", tags=["Memory"])
 
-router.include_router(system.router,  prefix="/system",  tags=["System"])
-router.include_router(command.router, prefix="/command", tags=["Commands"])
-router.include_router(memory.router,  prefix="/memory",  tags=["Memory"])
-router.include_router(context.router, prefix="/context", tags=["Context"])
+__all__ = ["router"]

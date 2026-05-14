@@ -1,3 +1,3 @@
-from .engine import ObservationEngine, observation_engine
+from .engine import observation_engine
 
-__all__ = ["ObservationEngine", "observation_engine"]
+__all__ = ["observation_engine"]

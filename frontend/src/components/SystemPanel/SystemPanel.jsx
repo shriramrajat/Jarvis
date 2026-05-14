@@ -1,93 +1,58 @@
-/**
- * JARVIS OS — System Panel
- * Right sidebar showing live system metrics: CPU, RAM, active app, context.
- */
 import React from 'react';
 import './SystemPanel.css';
 
-function MetricBar({ label, value, color = 'var(--cyan)', id }) {
-  const pct = Math.min(100, Math.round(value || 0));
-  const getColor = (v) => {
-    if (v > 85) return 'var(--red)';
-    if (v > 60) return 'var(--amber)';
-    return color;
-  };
-  const barColor = getColor(pct);
-
-  return (
-    <div className="metric" id={id}>
-      <div className="metric__header">
-        <span className="metric__label text-xs uppercase text-dim">{label}</span>
-        <span className="metric__value font-hud text-xs" style={{ color: barColor }}>{pct}%</span>
-      </div>
-      <div className="metric__track">
-        <div
-          className="metric__fill"
-          style={{ width: `${pct}%`, background: barColor, boxShadow: `0 0 6px ${barColor}` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }) {
-  return (
-    <div className="info-row">
-      <span className="info-row__label text-xs uppercase text-dim">{label}</span>
-      <span className="info-row__value text-xs" style={{ color: 'var(--text-primary)' }}>
-        {value || '—'}
-      </span>
-    </div>
-  );
-}
-
 export default function SystemPanel({ context }) {
-  return (
-    <div className="sys-panel panel" id="system-panel">
-      <div className="sys-panel__header">
-        <span className="font-hud text-xs uppercase text-cyan" style={{ letterSpacing: '0.15em' }}>
-          System Status
-        </span>
-        <div className="sys-panel__indicator" />
+  // context format from backend:
+  // { cpu_percent, memory_percent, disk_percent, active_window }
+  const metrics = context || {
+    cpu_percent: 0,
+    memory_percent: 0,
+    disk_percent: 0,
+    active_window: "Unknown"
+  };
+
+  const getMeterColor = (val) => {
+    if (val < 50) return 'var(--cyan)';
+    if (val < 85) return 'var(--orange)';
+    return 'var(--red)';
+  };
+
+  const MetricBar = ({ label, value }) => (
+    <div className="sys-panel__metric">
+      <div className="sys-panel__metric-label text-xs text-dim">
+        <span>{label}</span>
+        <span>{value}%</span>
       </div>
-
-      <div className="sys-panel__section">
-        <MetricBar id="metric-cpu" label="CPU" value={context?.cpu_percent} color="var(--cyan)" />
-        <MetricBar id="metric-ram" label="RAM" value={context?.memory_percent} color="var(--purple)" />
-      </div>
-
-      <div className="sys-panel__divider" />
-
-      <div className="sys-panel__section">
-        <InfoRow label="Active App" value={context?.active_app} />
-        <InfoRow
-          label="Window"
-          value={context?.active_window_title
-            ? context.active_window_title.length > 28
-              ? context.active_window_title.slice(0, 28) + '…'
-              : context.active_window_title
-            : '—'
-          }
+      <div className="sys-panel__metric-bar-bg">
+        <div 
+          className="sys-panel__metric-bar-fill" 
+          style={{ 
+            width: `${value}%`,
+            background: getMeterColor(value),
+            boxShadow: `0 0 8px ${getMeterColor(value)}`
+          }} 
         />
-        <InfoRow label="Project" value={context?.current_project} />
-        <InfoRow label="Task" value={context?.current_task} />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="sys-panel">
+      <div className="sys-panel__header">
+        <h2 className="font-hud text-cyan" style={{ fontSize: '18px', letterSpacing: '2px' }}>SYSTEM TELEMETRY</h2>
+        <div className="sys-panel__divider" />
       </div>
 
-      <div className="sys-panel__divider" />
+      <div className="sys-panel__content">
+        <MetricBar label="CPU LOAD" value={metrics.cpu_percent || 0} />
+        <MetricBar label="MEMORY ALLOCATION" value={metrics.memory_percent || 0} />
+        <MetricBar label="STORAGE POOL" value={metrics.disk_percent || 0} />
 
-      <div className="sys-panel__section">
-        <span className="text-xs uppercase text-dim" style={{ letterSpacing: '0.1em' }}>
-          Recent Intents
-        </span>
-        <div className="sys-panel__intents">
-          {(context?.recent_intents || []).slice(-4).reverse().map((intent, i) => (
-            <div key={i} className="sys-panel__intent text-xs text-dim">
-              {intent}
-            </div>
-          ))}
-          {(!context?.recent_intents || context.recent_intents.length === 0) && (
-            <div className="text-xs text-dim" style={{ fontStyle: 'italic' }}>No recent intents</div>
-          )}
+        <div className="sys-panel__section">
+          <div className="text-xs text-dim mb-1">ACTIVE PROCESS</div>
+          <div className="sys-panel__value font-hud" style={{ color: '#fff', fontSize: '13px' }}>
+            {metrics.active_window || "NO SIGNAL"}
+          </div>
         </div>
       </div>
     </div>

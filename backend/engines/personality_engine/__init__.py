@@ -1,3 +1,3 @@
-from .engine import PersonalityEngine, personality_engine
+from .engine import personality_engine
 
-__all__ = ["PersonalityEngine", "personality_engine"]
+__all__ = ["personality_engine"]
