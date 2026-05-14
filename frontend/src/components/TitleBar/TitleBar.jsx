@@ -26,7 +26,7 @@ export default function TitleBar({ jarvisState, connected }) {
 
       <div className="titlebar__controls">
         <button className="titlebar__btn" onClick={minimizeApp}>_</button>
-        <button className="titlebar__btn titlebar__btn--close" onClick={closeApp}>✕</button>
+        <button className="titlebar__btn titlebar__btn--close" onClick={closeApp}>X</button>
       </div>
     </div>
   );
