@@ -1,2 +1,3 @@
-# Personality Engine — Phase 3
-# Placeholder: Tone, mood adaptation, speaking style control
+from .engine import PersonalityEngine, personality_engine
+
+__all__ = ["PersonalityEngine", "personality_engine"]

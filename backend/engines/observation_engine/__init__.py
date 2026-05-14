@@ -1,2 +1,3 @@
-# Observation Engine — Phase 3
-# Placeholder: Passive monitoring + pattern detection + proactive suggestions
+from .engine import ObservationEngine, observation_engine
+
+__all__ = ["ObservationEngine", "observation_engine"]

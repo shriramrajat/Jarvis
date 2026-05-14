@@ -22,6 +22,7 @@ from ...config import settings
 from ...event_bus import event_bus, Event, EventType
 from ...state import state_manager, JarvisState
 from ..memory_engine import memory_engine
+from ..personality_engine import personality_engine
 
 
 # ── System Prompt ──────────────────────────────────────────────────────────────
@@ -104,7 +105,14 @@ class BrainEngine:
 
     async def _build_messages(self, user_input: str, context: dict | None = None) -> list[dict]:
         """Build the message list for the API call with memory + context injection."""
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        
+        # ── Phase 3: Dynamic Personality Modifiers ──
+        base_prompt = SYSTEM_PROMPT
+        modifiers = personality_engine.get_dynamic_prompt_modifiers()
+        if modifiers:
+            base_prompt += "\n" + modifiers
+
+        messages = [{"role": "system", "content": base_prompt}]
 
         # Inject current context as a system note
         if context:

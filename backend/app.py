@@ -13,11 +13,10 @@ from .config import settings
 from .data import init_db
 from .event_bus import event_bus
 from .runtime.runtime_engine import RuntimeEngine
-from .runtime.ws_manager import ws_manager
-from .state import state_manager
-from .engines.context_engine import context_engine
 from .engines.brain_engine import brain_engine
 from .engines.memory_engine import memory_engine
+from .engines.observation_engine import observation_engine
+from .engines.personality_engine import personality_engine
 from .engines.automation_engine import automation_engine
 from .engines.voice_engine import voice_engine
 from .api import router as api_router
@@ -45,13 +44,19 @@ async def lifespan(app: FastAPI):
     # 5. Memory Engine — persistent conversations & knowledge (Phase 3)
     await memory_engine.start()
 
-    # 6. Automation Engine — desktop control
+    # 6. Observation Engine — proactive monitoring (Phase 3)
+    await observation_engine.start()
+
+    # 7. Personality Engine — dynamic prompt modifiers (Phase 3)
+    await personality_engine.start()
+
+    # 8. Automation Engine — desktop control
     await automation_engine.start()
 
-    # 7. Voice Engine — wake word + STT + TTS
+    # 9. Voice Engine — wake word + STT + TTS
     await voice_engine.start()
 
-    # 8. WS → Event Bus bridge
+    # 10. WS → Event Bus bridge
     ws_manager.register_listeners()
 
     logger.success("[App] All services online — ready to serve")
@@ -63,6 +68,8 @@ async def lifespan(app: FastAPI):
     await voice_engine.stop()
     await automation_engine.stop()
     await memory_engine.stop()
+    await personality_engine.stop()
+    await observation_engine.stop()
     await brain_engine.stop()
     await context_engine.stop()
     await event_bus.stop()
