@@ -25,7 +25,7 @@ JARVIS OS is not a chatbot. It's an intelligent AI layer that:
 | Layer | Technology |
 |-------|-----------|
 | API Server | FastAPI + Uvicorn |
-| AI Brain | Google Gemini 2.0 Flash (OpenAI-compatible) |
+| AI Brain | Google Gemini 2.0 Flash |
 | Wake Word | OpenWakeWord (local, free, no API key) |
 | Speech-to-Text | Faster Whisper (local, offline) |
 | Text-to-Speech | pyttsx3 (local, offline) |
