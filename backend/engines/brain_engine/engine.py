@@ -97,28 +97,25 @@ class BrainEngine:
     """
 
     def __init__(self):
-        self._client: AsyncOpenAI | None = None
+        self._cloud_client: AsyncOpenAI | None = None
+        self._local_client: AsyncOpenAI | None = None
         self._conversation_history: list[dict] = []
         self._max_history = 20          # Keep last 20 exchanges in context
         self._ready = False
 
-    def _get_client(self) -> AsyncOpenAI:
-        if not self._client:
-            if settings.OLLAMA_ENABLED:
-                logger.info(f"[Brain] Initializing local Ollama client at {settings.OLLAMA_HOST}")
-                self._client = AsyncOpenAI(
-                    api_key="ollama", # API key is not required for local Ollama, but openai library needs a dummy
-                    base_url=f"{settings.OLLAMA_HOST.rstrip('/')}/v1",
-                )
-            else:
-                if not settings.AI_API_KEY:
-                    raise ValueError("AI_API_KEY is not set in .env")
-                logger.info(f"[Brain] Initializing Cloud API client at {settings.AI_BASE_URL}")
-                self._client = AsyncOpenAI(
-                    api_key=settings.AI_API_KEY,
-                    base_url=settings.AI_BASE_URL,
-                )
-        return self._client
+    def _init_clients(self) -> None:
+        """Initialize both cloud and local clients for seamless failover."""
+        if settings.AI_API_KEY:
+            self._cloud_client = AsyncOpenAI(
+                api_key=settings.AI_API_KEY,
+                base_url=settings.AI_BASE_URL,
+            )
+        
+        if settings.OLLAMA_ENABLED:
+            self._local_client = AsyncOpenAI(
+                api_key="ollama", # Dummy key required by openai lib
+                base_url=f"{settings.OLLAMA_HOST.rstrip('/')}/v1",
+            )
 
     async def _build_messages(self, user_input: str, context: dict | None = None) -> list[dict]:
         """Build the message list for the API call with memory + context injection."""
@@ -199,25 +196,51 @@ class BrainEngine:
             }
 
     async def _call_ai(self, user_input: str, context: dict | None = None) -> dict:
-        """Make the API call and return parsed result."""
-        client = self._get_client()
+        """Make the API call. Tries Cloud first, silently fails over to Local if offline."""
+        if not self._cloud_client and not self._local_client:
+            self._init_clients()
+            
         messages = await self._build_messages(user_input, context)
 
-        active_model = settings.OLLAMA_MODEL if settings.OLLAMA_ENABLED else settings.AI_MODEL
-        logger.info(f"[Brain] → {active_model} | '{user_input[:50]}...'")
+        response = None
+        raw = ""
+        
+        # ATTEMPT 1: Cloud API (Fast, Smart)
+        if self._cloud_client:
+            try:
+                logger.info(f"[Brain] → CLOUD ({settings.AI_MODEL}) | '{user_input[:50]}...'")
+                response = await self._cloud_client.chat.completions.create(
+                    model=settings.AI_MODEL,
+                    messages=messages,
+                    temperature=settings.AI_TEMPERATURE,
+                    max_tokens=settings.AI_MAX_TOKENS,
+                    timeout=5.0 # Fast timeout to prevent hanging when internet is down
+                )
+                raw = response.choices[0].message.content
+                logger.debug(f"[Brain] ← CLOUD raw: {raw[:200]}")
+            except Exception as e:
+                logger.warning(f"[Brain] Cloud API failed ({e}), initiating Local Fallback...")
+                response = None # Mark as failed
 
-        # Local Ollama models often struggle to consistently output pure JSON without the response_format parameter.
-        # But we'll try it standard first. If needed, Ollama /v1 supports json mode via response_format={"type": "json_object"}.
-        response = await client.chat.completions.create(
-            model=active_model,
-            messages=messages,
-            temperature=settings.AI_TEMPERATURE,
-            max_tokens=settings.AI_MAX_TOKENS,
-            response_format={"type": "json_object"} # Ensure local model outputs valid JSON
-        )
-
-        raw = response.choices[0].message.content
-        logger.debug(f"[Brain] ← raw: {raw[:200]}")
+        # ATTEMPT 2: Local API (Offline, Private)
+        if response is None and self._local_client:
+            try:
+                logger.info(f"[Brain] → LOCAL ({settings.OLLAMA_MODEL}) | '{user_input[:50]}...'")
+                response = await self._local_client.chat.completions.create(
+                    model=settings.OLLAMA_MODEL,
+                    messages=messages,
+                    temperature=settings.AI_TEMPERATURE,
+                    max_tokens=settings.AI_MAX_TOKENS,
+                    response_format={"type": "json_object"} # Ensure valid JSON from smaller models
+                )
+                raw = response.choices[0].message.content
+                logger.debug(f"[Brain] ← LOCAL raw: {raw[:200]}")
+            except Exception as e:
+                logger.error(f"[Brain] Local API also failed: {e}")
+                raise e # Both failed, escalate the error
+                
+        if not response:
+            raise RuntimeError("Both Cloud and Local AI clients are disabled or failed.")
 
         # Update in-memory history (fallback)
         self._conversation_history.append({"role": "user", "content": user_input})
