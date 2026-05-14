@@ -104,12 +104,20 @@ class BrainEngine:
 
     def _get_client(self) -> AsyncOpenAI:
         if not self._client:
-            if not settings.AI_API_KEY:
-                raise ValueError("AI_API_KEY is not set in .env")
-            self._client = AsyncOpenAI(
-                api_key=settings.AI_API_KEY,
-                base_url=settings.AI_BASE_URL,
-            )
+            if settings.OLLAMA_ENABLED:
+                logger.info(f"[Brain] Initializing local Ollama client at {settings.OLLAMA_HOST}")
+                self._client = AsyncOpenAI(
+                    api_key="ollama", # API key is not required for local Ollama, but openai library needs a dummy
+                    base_url=f"{settings.OLLAMA_HOST.rstrip('/')}/v1",
+                )
+            else:
+                if not settings.AI_API_KEY:
+                    raise ValueError("AI_API_KEY is not set in .env")
+                logger.info(f"[Brain] Initializing Cloud API client at {settings.AI_BASE_URL}")
+                self._client = AsyncOpenAI(
+                    api_key=settings.AI_API_KEY,
+                    base_url=settings.AI_BASE_URL,
+                )
         return self._client
 
     async def _build_messages(self, user_input: str, context: dict | None = None) -> list[dict]:
@@ -195,13 +203,17 @@ class BrainEngine:
         client = self._get_client()
         messages = await self._build_messages(user_input, context)
 
-        logger.info(f"[Brain] → {settings.AI_MODEL} @ {settings.AI_BASE_URL[:40]} | '{user_input[:50]}...'")
+        active_model = settings.OLLAMA_MODEL if settings.OLLAMA_ENABLED else settings.AI_MODEL
+        logger.info(f"[Brain] → {active_model} | '{user_input[:50]}...'")
 
+        # Local Ollama models often struggle to consistently output pure JSON without the response_format parameter.
+        # But we'll try it standard first. If needed, Ollama /v1 supports json mode via response_format={"type": "json_object"}.
         response = await client.chat.completions.create(
-            model=settings.AI_MODEL,
+            model=active_model,
             messages=messages,
             temperature=settings.AI_TEMPERATURE,
             max_tokens=settings.AI_MAX_TOKENS,
+            response_format={"type": "json_object"} # Ensure local model outputs valid JSON
         )
 
         raw = response.choices[0].message.content

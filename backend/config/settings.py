@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     AI_TEMPERATURE: float = 0.7
     AI_MAX_TOKENS: int = 2048
 
+    # ── AI (Local Offline / Ollama) ───────────────────────────────────────────
+    OLLAMA_ENABLED: bool = True  # Toggle this to False to fall back to Cloud API
+    OLLAMA_HOST: str = "http://127.0.0.1:11434"
+    OLLAMA_MODEL: str = "llama3.2:1b"
+
+
     # ── Voice ────────────────────────────────────────────────────────────────
     WAKE_WORD: str = "hey_jarvis"     # OpenWakeWord built-in model name
     STT_MODEL: str = "base"           # tiny | base | small | medium | large-v3
