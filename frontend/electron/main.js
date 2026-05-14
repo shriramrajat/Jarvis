@@ -179,6 +179,14 @@ app.whenReady().then(async () => {
   await createWindow();
   createTray();
 
+  // Make JARVIS auto-start silently on Windows boot (Production only)
+  if (!isDev) {
+    app.setLoginItemSettings({
+      openAtLogin: true,
+      openAsHidden: true, // Start quietly in the tray
+    });
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
