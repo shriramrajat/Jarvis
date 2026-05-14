@@ -20,7 +20,7 @@ from loguru import logger
 
 from ...config import settings
 from ...event_bus import event_bus, Event, EventType
-from ...state import state_manager, JarvisState
+from ...state import state_manager, JarvisState, JarvisMode
 from ..memory_engine import memory_engine
 from ..personality_engine import personality_engine
 from ..chronos_engine import chronos_engine
@@ -365,6 +365,19 @@ class BrainEngine:
         """Voice input is the same flow as text input."""
         await self._handle_text_input(event)
 
+    async def _handle_gui_input(self, event: Event) -> None:
+        """Handle GUI inputs like mode changes."""
+        action = event.data.get("action")
+        value = event.data.get("value")
+
+        if action == "set_mode":
+            try:
+                new_mode = JarvisMode(value)
+                await state_manager.set_mode(new_mode, source="gui")
+                logger.info(f"[Brain] GUI set mode to {new_mode.value}")
+            except ValueError:
+                logger.warning(f"[Brain] Invalid mode requested from GUI: {value}")
+
     async def clear_history(self) -> None:
         """Clear conversation context (new session)."""
         self._conversation_history.clear()
@@ -376,12 +389,14 @@ class BrainEngine:
         """Register event subscriptions."""
         event_bus.subscribe(EventType.TEXT_INPUT,  self._handle_text_input)
         event_bus.subscribe(EventType.VOICE_INPUT, self._handle_voice_input)
+        event_bus.subscribe(EventType.GUI_INPUT,   self._handle_gui_input)
         self._ready = True
         logger.success(f"[Brain] Started — model={settings.AI_MODEL} base={settings.AI_BASE_URL}")
 
     async def stop(self) -> None:
         event_bus.unsubscribe(EventType.TEXT_INPUT,  self._handle_text_input)
         event_bus.unsubscribe(EventType.VOICE_INPUT, self._handle_voice_input)
+        event_bus.unsubscribe(EventType.GUI_INPUT,   self._handle_gui_input)
         logger.info("[Brain] Stopped")
 
 
