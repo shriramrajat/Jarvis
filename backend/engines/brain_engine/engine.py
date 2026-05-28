@@ -15,6 +15,7 @@ Phase 3: Memory-augmented reasoning, REMEMBER/RECALL, preference learning.
 """
 import asyncio
 import json
+import uuid
 from openai import AsyncOpenAI
 from loguru import logger
 
@@ -101,6 +102,7 @@ class BrainEngine:
         self._local_client: AsyncOpenAI | None = None
         self._conversation_history: list[dict] = []
         self._max_history = 20          # Keep last 20 exchanges in context
+        self._pending_commands: dict[str, dict] = {}
         self._ready = False
 
     def _init_clients(self) -> None:
@@ -256,7 +258,7 @@ class BrainEngine:
         if not user_input:
             return
 
-        command_id = event.data.get("command_id", "")
+        command_id = event.data.get("command_id", "") or str(uuid.uuid4())
         context    = event.data.get("context")
 
         logger.info(f"[Brain] Processing: '{user_input}'")
@@ -290,6 +292,11 @@ class BrainEngine:
         # Check if confirmation is needed for high-risk actions
         if requires_confirmation and settings.REQUIRE_CONFIRMATION_HIGH_RISK:
             await state_manager.transition(JarvisState.WAITING_CONFIRM, source="brain")
+            self._pending_commands[command_id] = {
+                "action": action,
+                "params": params,
+                "risk": risk,
+            }
             await event_bus.publish(Event(
                 type=EventType.PERMISSION_REQUIRED,
                 data={
@@ -378,6 +385,53 @@ class BrainEngine:
             except ValueError:
                 logger.warning(f"[Brain] Invalid mode requested from GUI: {value}")
 
+    async def _handle_permission_granted(self, event: Event) -> None:
+        """Handle permission granted events and run the pending action."""
+        command_id = event.data.get("command_id")
+        if not command_id or command_id not in self._pending_commands:
+            logger.warning(f"[Brain] Received permission grant for unknown command: {command_id}")
+            return
+
+        cmd = self._pending_commands.pop(command_id)
+        logger.info(f"[Brain] Permission GRANTED for command {command_id}. Dispatching execution.")
+
+        # Publish EXECUTION_STARTED
+        await event_bus.publish(Event(
+            type=EventType.EXECUTION_STARTED,
+            data={
+                "command_id": command_id,
+                "action": cmd["action"],
+                "params": cmd["params"],
+                "risk": cmd["risk"],
+            },
+            source="brain",
+            priority="HIGH",
+        ))
+
+    async def _handle_permission_denied(self, event: Event) -> None:
+        """Handle permission denied events, return to IDLE, and notify user."""
+        command_id = event.data.get("command_id")
+        if not command_id or command_id not in self._pending_commands:
+            return
+
+        self._pending_commands.pop(command_id)
+        logger.info(f"[Brain] Permission DENIED for command {command_id}")
+
+        await state_manager.transition(JarvisState.IDLE, source="brain")
+
+        await event_bus.publish(Event(
+            type=EventType.RESPONSE_GENERATED,
+            data={
+                "command_id": command_id,
+                "text": "Understood, sir. Action cancelled.",
+                "action": "NONE",
+                "risk": "LOW",
+                "requires_confirmation": False,
+            },
+            source="brain",
+            priority="HIGH",
+        ))
+
     async def clear_history(self) -> None:
         """Clear conversation context (new session)."""
         self._conversation_history.clear()
@@ -390,6 +444,8 @@ class BrainEngine:
         event_bus.subscribe(EventType.TEXT_INPUT,  self._handle_text_input)
         event_bus.subscribe(EventType.VOICE_INPUT, self._handle_voice_input)
         event_bus.subscribe(EventType.GUI_INPUT,   self._handle_gui_input)
+        event_bus.subscribe(EventType.PERMISSION_GRANTED, self._handle_permission_granted)
+        event_bus.subscribe(EventType.PERMISSION_DENIED,  self._handle_permission_denied)
         self._ready = True
         logger.success(f"[Brain] Started — model={settings.AI_MODEL} base={settings.AI_BASE_URL}")
 
@@ -397,6 +453,8 @@ class BrainEngine:
         event_bus.unsubscribe(EventType.TEXT_INPUT,  self._handle_text_input)
         event_bus.unsubscribe(EventType.VOICE_INPUT, self._handle_voice_input)
         event_bus.unsubscribe(EventType.GUI_INPUT,   self._handle_gui_input)
+        event_bus.unsubscribe(EventType.PERMISSION_GRANTED, self._handle_permission_granted)
+        event_bus.unsubscribe(EventType.PERMISSION_DENIED,  self._handle_permission_denied)
         logger.info("[Brain] Stopped")
 
 
