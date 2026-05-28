@@ -73,6 +73,18 @@ export function useJarvisWS() {
           timestamp: new Date().toISOString(),
         }]);
         break;
+      case 'PERMISSION_REQUIRED':
+        setMessages(prev => [...prev.slice(-99), {
+          id: data.command_id || Date.now(),
+          role: 'jarvis',
+          content: data.message || 'Permission required for this action.',
+          timestamp: new Date().toISOString(),
+          isPermissionRequest: true,
+          command_id: data.command_id,
+          action: data.action,
+          params: data.params,
+        }]);
+        break;
       case 'CONTEXT_UPDATE':
         setContext(data);
         break;
@@ -98,6 +110,20 @@ export function useJarvisWS() {
       timestamp: new Date().toISOString(),
     }]);
     send('TEXT_INPUT', { text });
+  }, [send]);
+
+  const respondToPermission = useCallback((commandId, allow) => {
+    // Send response to WS
+    send(allow ? 'PERMISSION_OK' : 'PERMISSION_NO', { command_id: commandId });
+    
+    // Update local message list to reflect resolution state
+    setMessages(prev =>
+      prev.map(msg =>
+        msg.command_id === commandId
+          ? { ...msg, permissionResolved: allow ? 'allowed' : 'denied' }
+          : msg
+      )
+    );
   }, [send]);
 
   // Fetch initial history
@@ -126,5 +152,5 @@ export function useJarvisWS() {
     };
   }, [connect]);
 
-  return { connected, jarvisState, jarvisMode, messages, context, sendCommand, send };
+  return { connected, jarvisState, jarvisMode, messages, context, sendCommand, send, respondToPermission };
 }
