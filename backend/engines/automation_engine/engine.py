@@ -160,8 +160,9 @@ class AutomationEngine:
         if not command:
             raise ValueError("No command specified")
 
-        # Safety check — validate against whitelist for auto-execution
-        is_safe = any(command.lower().startswith(pfx) for pfx in SAFE_COMMAND_PREFIXES)
+        # Safety check — validate against whitelist and verify no injection characters are present
+        has_injection = any(char in command for char in ["&", "|", ";", "\n", "\r", ">", "<", "`", "$"])
+        is_safe = not has_injection and any(command.lower().startswith(pfx) for pfx in SAFE_COMMAND_PREFIXES)
         if not is_safe and settings.REQUIRE_CONFIRMATION_HIGH_RISK:
             raise PermissionError(f"Command '{command}' requires manual confirmation")
 
