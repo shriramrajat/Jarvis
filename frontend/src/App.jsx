@@ -47,6 +47,7 @@ export default function App() {
     context,
     sendCommand,
     send,
+    respondToPermission,
   } = useJarvisWS();
 
   const [greeting] = useState(() => {
@@ -69,7 +70,7 @@ export default function App() {
 
         {/* Left — Conversation */}
         <aside className="app__left">
-          <ConversationPanel messages={messages} />
+          <ConversationPanel messages={messages} respondToPermission={respondToPermission} />
         </aside>
 
         {/* Center — Orb + Command */}
