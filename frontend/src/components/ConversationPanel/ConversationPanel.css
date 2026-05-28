@@ -97,3 +97,77 @@
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Permission Confirmation Cards styling */
+.msg--permission .msg__content {
+  border-left-color: var(--amber);
+  background: rgba(255, 191, 0, 0.04);
+}
+
+.msg__permission-card {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(4, 15, 22, 0.8);
+  border: 1px solid rgba(255, 191, 0, 0.2);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 0 10px rgba(255, 191, 0, 0.1);
+}
+
+.msg__permission-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.4;
+}
+
+.msg__permission-details code {
+  font-family: Consolas, monospace;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 4px;
+  border-radius: 2px;
+  color: #ffcc66;
+}
+
+.msg__permission-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.msg__permission-status {
+  letter-spacing: 1px;
+  font-weight: bold;
+  padding-top: 4px;
+}
+
+.btn--xs {
+  padding: 4px 10px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  border-radius: 2px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn--red {
+  background: rgba(255, 50, 50, 0.15);
+  border: 1px solid rgba(255, 50, 50, 0.4);
+  color: #ff9999;
+}
+.btn--red:hover:not(:disabled) {
+  background: rgba(255, 50, 50, 0.3);
+  box-shadow: 0 0 8px rgba(255, 50, 50, 0.4);
+}
+
+.btn--cyan {
+  background: rgba(0, 243, 255, 0.15);
+  border: 1px solid rgba(0, 243, 255, 0.4);
+  color: var(--cyan);
+}
+.btn--cyan:hover:not(:disabled) {
+  background: rgba(0, 243, 255, 0.3);
+  box-shadow: 0 0 8px rgba(0, 243, 255, 0.4);
+}
