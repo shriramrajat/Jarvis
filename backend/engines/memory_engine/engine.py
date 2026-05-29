@@ -11,6 +11,7 @@ No external vector DB required — uses SQLite FTS5 for full-text search
 and TF-IDF-style keyword matching for memory recall.
 """
 import asyncio
+import json
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
@@ -188,14 +189,53 @@ class MemoryEngine:
                 keyword_filters.append(Memory.summary.ilike(f"%{kw}%"))
 
             base_query = base_query.where(or_(*keyword_filters))
-            base_query = base_query.order_by(
-                desc(Memory.importance),
-                desc(Memory.access_count),
-                desc(Memory.updated_at),
-            ).limit(limit)
 
-            result = await session.execute(base_query)
-            rows = result.scalars().all()
+            # Query up to 50 candidate matches to rank in Python
+            result = await session.execute(base_query.limit(50))
+            candidate_rows = result.scalars().all()
+
+            # Rank candidates in Python by relevance score
+            scored_candidates = []
+            for row in candidate_rows:
+                score = 0.0
+                content_lower = row.content.lower()
+                summary_lower = (row.summary or "").lower()
+                
+                # Check tags safely
+                tags = row.tags or []
+                if isinstance(tags, str):
+                    try:
+                        tags = json.loads(tags)
+                    except Exception:
+                        tags = [tags]
+                tags_lower = [str(t).lower() for t in tags]
+
+                for kw in keywords:
+                    # Match in content (base weight 1.0 + count weight 0.2)
+                    if kw in content_lower:
+                        score += 1.0 + (content_lower.count(kw) * 0.2)
+                    
+                    # Match in summary (base weight 0.5)
+                    if kw in summary_lower:
+                        score += 0.5 + (summary_lower.count(kw) * 0.1)
+                        
+                    # Match in tags (high priority: 1.5)
+                    if any(kw in tag for tag in tags_lower):
+                        score += 1.5
+
+                # Adjust score by database-level importance metrics
+                score *= (1.0 + (row.importance or 0.5))
+                
+                # Slight bump for frequently accessed memories
+                score += (row.access_count or 0) * 0.05
+                
+                scored_candidates.append((score, row))
+
+            # Sort by descending score
+            scored_candidates.sort(key=lambda x: x[0], reverse=True)
+            
+            # Select top rows up to requested limit
+            rows = [item[1] for item in scored_candidates[:limit]]
 
             # Bump access count for retrieved memories
             for row in rows:
