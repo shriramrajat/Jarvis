@@ -29,10 +29,10 @@ class Settings(BaseSettings):
     DB_PATH: str = str(BASE_DIR / "data" / "db" / "jarvis.db")
     DATABASE_URL: str = f"sqlite+aiosqlite:///{str(BASE_DIR / 'data' / 'db' / 'jarvis.db')}"
 
-    # ── AI (DeepSeek / OpenAI-compatible) ─────────────────────────────────────
+    # ── AI (Google Gemini — OpenAI-compatible) ───────────────────────────────
     AI_API_KEY: str = ""
-    AI_BASE_URL: str = "https://api.deepseek.com"
-    AI_MODEL: str = "deepseek-chat"
+    AI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    AI_MODEL: str = "gemini-2.0-flash"
     AI_TEMPERATURE: float = 0.7
     AI_MAX_TOKENS: int = 2048
 
@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     WAKE_WORD: str = "hey_jarvis"     # OpenWakeWord built-in model name
     STT_MODEL: str = "base"           # tiny | base | small | medium | large-v3
     TTS_VOICE: str = "en_US-arctic-medium"
+
+    # Piper TTS Paths
+    PIPER_EXE: str = str(BASE_DIR / "bin" / "piper" / "piper.exe")
+    PIPER_VOICES_DIR: str = str(BASE_DIR / "bin" / "piper" / "voices")
 
     # ── Observation ──────────────────────────────────────
     OBSERVATION_MODE: bool = False
