@@ -171,54 +171,102 @@ class VoiceEngine:
         except Exception as e:
             logger.error(f"[Voice] Wake word loop crashed: {e}")
 
-    def _transcribe_async(self, audio_np: np.ndarray, sample_rate: int):
-        """Run Whisper transcription in a thread and publish result."""
+    async def _do_transcribe_async(self, audio_np: np.ndarray, sample_rate: int):
+        """Run Whisper transcription in the default thread pool and publish result."""
         def _do_transcribe():
-            try:
-                segments, info = self._whisper_model.transcribe(
-                    audio_np.astype(np.float32),
-                    language="en",
-                    beam_size=3,
-                    vad_filter=True,
-                )
-                text = " ".join(s.text for s in segments).strip()
-                if text:
-                    logger.info(f"[Voice] Transcribed: '{text}'")
-                    asyncio.run_coroutine_threadsafe(
-                        event_bus.publish(Event(
-                            type=EventType.VOICE_INPUT,
-                            data={"text": text, "source": "voice"},
-                            source="voice",
-                            priority="HIGH",
-                        )),
-                        self._loop,
-                    )
-                else:
-                    logger.debug("[Voice] Empty transcription — ignoring")
-                    asyncio.run_coroutine_threadsafe(
-                        state_manager.transition(JarvisState.IDLE, source="voice"),
-                        self._loop,
-                    )
-            except Exception as e:
-                logger.error(f"[Voice] Transcription failed: {e}")
+            segments, info = self._whisper_model.transcribe(
+                audio_np.astype(np.float32),
+                language="en",
+                beam_size=3,
+                vad_filter=True,
+            )
+            return " ".join(s.text for s in segments).strip()
 
-        threading.Thread(target=_do_transcribe, daemon=True).start()
+        try:
+            # Execute blocking Whisper call in loop thread pool to avoid GIL freeze
+            text = await asyncio.to_thread(_do_transcribe)
+            if text:
+                logger.info(f"[Voice] Transcribed: '{text}'")
+                await event_bus.publish(Event(
+                    type=EventType.VOICE_INPUT,
+                    data={"text": text, "source": "voice"},
+                    source="voice",
+                    priority="HIGH",
+                ))
+            else:
+                logger.debug("[Voice] Empty transcription — ignoring")
+                await state_manager.transition(JarvisState.IDLE, source="voice")
+        except Exception as e:
+            logger.error(f"[Voice] Transcription failed: {e}")
+
+    def _transcribe_async(self, audio_np: np.ndarray, sample_rate: int):
+        """Bridge sync thread to async loop for transcription."""
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._do_transcribe_async(audio_np, sample_rate),
+                self._loop,
+            )
 
     # ── TTS ─────────────────────────────────────────────────────────────────────
 
     def _tts_loop(self):
         """Background thread that drains the TTS queue."""
+        import os
+        import subprocess
+        try:
+            import winsound
+        except ImportError:
+            winsound = None
+
         while self._running:
             try:
                 text = self._tts_queue.get(timeout=1.0)
-                if self._tts_engine:
-                    self._tts_engine.say(text)
-                    self._tts_engine.runAndWait()
+                
+                # Check if Piper TTS is configured and available
+                piper_exe = settings.PIPER_EXE
+                model_name = settings.TTS_VOICE
+                model_path = os.path.join(settings.PIPER_VOICES_DIR, f"{model_name}.onnx")
+                
+                if winsound and os.path.exists(piper_exe) and os.path.exists(model_path):
+                    logger.info(f"[Voice] Synthesizing speech via Piper (voice: {model_name})")
+                    try:
+                        # Output file path
+                        out_wav = os.path.join(settings.BASE_DIR, "runtime", "tts_output.wav")
+                        os.makedirs(os.path.dirname(out_wav), exist_ok=True)
+                        
+                        # Run piper command
+                        proc = subprocess.Popen(
+                            [piper_exe, "--model", model_path, "--output_file", out_wav],
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                        )
+                        proc.communicate(input=text.encode('utf-8'))
+                        
+                        # Play WAV file natively on Windows
+                        if os.path.exists(out_wav):
+                            winsound.PlaySound(out_wav, winsound.SND_FILENAME)
+                        else:
+                            logger.warning("[Voice] Piper output WAV not found, falling back to pyttsx3")
+                            self._speak_fallback(text)
+                    except Exception as e:
+                        logger.error(f"[Voice] Piper synthesis failed: {e}, falling back to pyttsx3")
+                        self._speak_fallback(text)
+                else:
+                    self._speak_fallback(text)
+                    
                 self._tts_queue.task_done()
             except queue.Empty:
                 continue
             except Exception as e:
                 logger.error(f"[Voice] TTS error: {e}")
+
+    def _speak_fallback(self, text: str):
+        """Fallback TTS engine using pyttsx3."""
+        if self._tts_engine:
+            self._tts_engine.say(text)
+            self._tts_engine.runAndWait()
 
     def _speak(self, text: str):
         """Queue text for TTS playback."""
