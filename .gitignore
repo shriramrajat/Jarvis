@@ -63,3 +63,6 @@ Thumbs.db
 
 # ── OS ────────────────────────────────────────────────────────
 desktop.ini
+
+pytest_cache/
+.pytest_cache
