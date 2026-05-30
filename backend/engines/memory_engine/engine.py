@@ -115,7 +115,7 @@ class MemoryEngine:
             result = await session.execute(select(func.count(Conversation.id)))
             return result.scalar() or 0
 
-    # ── Semantic Memory (Facts / Knowledge) ──────────────────────────────────
+    # ── Semantic Memory (Facts / Knowledge) 
 
     async def store_memory(
         self,
