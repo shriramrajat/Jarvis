@@ -14,6 +14,8 @@ Each action publishes EXECUTION_COMPLETED or EXECUTION_FAILED event.
 High-risk commands are validated against a whitelist before execution.
 """
 import asyncio
+import uuid
+from datetime import datetime
 import subprocess
 import webbrowser
 import urllib.parse
@@ -24,6 +26,9 @@ from loguru import logger
 from ...config import settings
 from ...event_bus import event_bus, Event, EventType
 from ...state import state_manager, JarvisState, JarvisMode
+from ...data.database import AsyncSessionLocal
+from ...data.models import AutomationLog
+
 
 
 # ── Whitelisted commands (LOW/MEDIUM risk — auto-execute) ─────────────────────
@@ -118,6 +123,11 @@ class AutomationEngine:
             await state_manager.transition(JarvisState.IDLE, source="automation")
             return
 
+        start_time = datetime.utcnow()
+        status = "success"
+        error_msg = None
+        result = None
+
         try:
             result = await handler(params)
             await event_bus.publish(Event(
@@ -127,6 +137,8 @@ class AutomationEngine:
                 priority="MEDIUM",
             ))
         except Exception as e:
+            status = "failed"
+            error_msg = str(e)
             logger.error(f"[Automation] {action} failed: {e}")
             await event_bus.publish(Event(
                 type=EventType.EXECUTION_FAILED,
@@ -134,10 +146,59 @@ class AutomationEngine:
                 source="automation",
                 priority="HIGH",
             ))
+            raise
         finally:
             # Return to IDLE (SPEAKING handles its own transition via TTS engine)
             if state_manager.state == JarvisState.EXECUTING:
                 await state_manager.transition(JarvisState.IDLE, source="automation")
+
+            # Log to database
+            duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+
+            # Determine risk level
+            risk_level = "LOW"
+            if action in ("FILE_OPERATION", "OPEN_URL", "SCHEDULE"):
+                risk_level = "MEDIUM"
+            elif action == "RUN_COMMAND":
+                command = params.get("command", "").strip()
+                has_injection = any(char in command for char in ["&", "|", ";", "\n", "\r", ">", "<", "`", "$"])
+                is_safe = not has_injection and any(command.lower().startswith(pfx) for pfx in SAFE_COMMAND_PREFIXES)
+                risk_level = "LOW" if is_safe else "HIGH"
+
+            # Reconstruct clean command representation
+            command_representation = action
+            if action == "OPEN_APP":
+                command_representation = f"open app: {params.get('app', '')}"
+            elif action == "RUN_COMMAND":
+                command_representation = params.get("command", "")
+            elif action == "SEARCH_WEB":
+                command_representation = f"search: {params.get('query', '')}"
+            elif action == "OPEN_URL":
+                command_representation = f"open URL: {params.get('url', '')}"
+            elif action == "FILE_OPERATION":
+                command_representation = f"file {params.get('op', '')}: {params.get('path', '')}"
+            elif action == "SET_MODE":
+                command_representation = f"set mode: {params.get('mode', '')}"
+            elif action == "SCHEDULE":
+                command_representation = f"schedule: {params.get('message', '')} in {params.get('delay_seconds', '')}s"
+
+            try:
+                async with AsyncSessionLocal() as session:
+                    log_entry = AutomationLog(
+                        id=str(uuid.uuid4()),
+                        action_type=action,
+                        command=command_representation,
+                        params=params,
+                        status=status,
+                        risk_level=risk_level,
+                        duration_ms=duration_ms,
+                        error=error_msg,
+                    )
+                    session.add(log_entry)
+                    await session.commit()
+                logger.debug(f"[Automation] Saved execution log to database: {action}")
+            except Exception as db_err:
+                logger.warning(f"[Automation] Failed to save execution log: {db_err}")
 
     # ── Action Handlers ─────────────────────────────────────────────────────────
 
@@ -234,9 +295,82 @@ class AutomationEngine:
         return {"mode": mode_str}
 
     async def _file_operation(self, params: dict) -> dict:
-        # Phase 3 — basic stub for now
-        logger.warning("[Automation] File operations are Phase 3")
-        return {"status": "not_implemented", "phase": 3}
+        op = params.get("op", "").lower().strip()
+        path_str = params.get("path", "").strip()
+        
+        if not path_str:
+            raise ValueError("No path specified for file operation")
+            
+        import os
+        from pathlib import Path
+        import shutil
+        
+        # Resolve home directory reference (e.g. ~)
+        resolved_path = Path(os.path.expanduser(path_str)).resolve()
+        
+        if op == "read":
+            if not resolved_path.exists():
+                raise FileNotFoundError(f"File not found: {path_str}")
+            if not resolved_path.is_file():
+                raise ValueError(f"Path is not a file: {path_str}")
+            
+            # Read first 10000 characters to prevent memory overflow
+            with open(resolved_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read(10000)
+            return {"content": content, "truncated": len(content) >= 10000}
+            
+        elif op in ("create", "write"):
+            content = params.get("content", "")
+            resolved_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(resolved_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            return {"status": "success", "path": str(resolved_path)}
+            
+        elif op == "append":
+            content = params.get("content", "")
+            if not resolved_path.exists():
+                raise FileNotFoundError(f"File not found: {path_str}")
+            with open(resolved_path, "a", encoding="utf-8") as f:
+                f.write(content)
+            return {"status": "success", "path": str(resolved_path)}
+            
+        elif op == "delete":
+            if not resolved_path.exists():
+                raise FileNotFoundError(f"Path not found: {path_str}")
+            if resolved_path.is_file():
+                os.remove(resolved_path)
+                return {"status": "success", "deleted_file": str(resolved_path)}
+            else:
+                shutil.rmtree(resolved_path)
+                return {"status": "success", "deleted_directory": str(resolved_path)}
+                
+        elif op == "move":
+            dest_str = params.get("destination", "").strip()
+            if not dest_str:
+                raise ValueError("No destination specified for move operation")
+            dest_path = Path(os.path.expanduser(dest_str)).resolve()
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(resolved_path), str(dest_path))
+            return {"status": "success", "from": str(resolved_path), "to": str(dest_path)}
+            
+        elif op == "list":
+            if not resolved_path.exists():
+                raise FileNotFoundError(f"Directory not found: {path_str}")
+            if not resolved_path.is_dir():
+                raise ValueError(f"Path is not a directory: {path_str}")
+            
+            items = []
+            for child in resolved_path.iterdir():
+                items.append({
+                    "name": child.name,
+                    "is_dir": child.is_dir(),
+                    "size_bytes": child.stat().st_size if child.is_file() else None,
+                })
+            # Limit results to 100 entries
+            return {"items": items[:100], "truncated": len(items) > 100}
+            
+        else:
+            raise ValueError(f"Unsupported file operation: {op}")
 
     async def _workflow(self, params: dict) -> dict:
         """Executes a multi-step routine sequentially."""
