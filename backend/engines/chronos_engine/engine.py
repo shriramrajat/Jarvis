@@ -60,6 +60,12 @@ class ChronosEngine:
     async def _hourly_check(self) -> None:
         """Example background cron task: simple hourly tick."""
         logger.debug("[Chronos] Hourly background check running")
+        try:
+            from ..observation_engine.engine import observation_engine
+            await observation_engine.learn_habits_and_patterns()
+        except Exception as e:
+            logger.error(f"[Chronos] Failed to run habit learning: {e}")
+
 
     async def start(self) -> None:
         """Start the scheduler and register default cron jobs."""
